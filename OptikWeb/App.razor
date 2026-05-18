@@ -1,6 +1,21 @@
-﻿<Router AppAssembly="@typeof(App).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+﻿<Router AppAssembly="@typeof(App).Assembly">
     <Found Context="routeData">
         <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)"/>
         <FocusOnNavigate RouteData="@routeData" Selector="h1" />
     </Found>
+    <NotFound>
+        <PageTitle>Not Found</PageTitle>
+        <LayoutView Layout="@typeof(MainLayout)">
+            <div class="container mt-5">
+                <div class="row">
+                    <div class="col-md-6 offset-md-3 text-center">
+                        <h1 class="display-4">404</h1>
+                        <h2 class="mb-4">Sayfa Bulunamadı</h2>
+                        <p class="lead mb-4">Aradığınız sayfa mevcut değil.</p>
+                        <a href="/" class="btn btn-primary">Ana Sayfaya Dön</a>
+                    </div>
+                </div>
+            </div>
+        </LayoutView>
+    </NotFound>
 </Router>
