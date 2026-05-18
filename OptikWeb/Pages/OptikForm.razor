@@ -1,0 +1,276 @@
+@page "/optik-form"
+@using OptikWeb.Services
+@using System.IO
+@inject OpticalFormService FormService
+
+<PageTitle>Optik Form Reader</PageTitle>
+
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <h1 class="mb-4">
+                <i class="bi bi-document-scan"></i> Optik Form Okuyucu
+            </h1>
+            
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <strong>Hata:</strong> @errorMessage
+                    <button type="button" class="btn-close" @onclick="() => errorMessage = string.Empty"></button>
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(successMessage))
+            {
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <strong>Başarılı:</strong> @successMessage
+                    <button type="button" class="btn-close" @onclick="() => successMessage = string.Empty"></button>
+                </div>
+            }
+
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Form Yükleme</h5>
+                </div>
+                <div class="card-body">
+                    <div class="form-group mb-3">
+                        <label for="fileInput" class="form-label">Optik Form Görüntüsü Seçin:</label>
+                        <InputFile id="fileInput"
+                                   class="form-control" 
+                                   OnChange="@OnFileSelected"
+                                   accept=".jpg,.jpeg,.png,.pdf"
+                                   disabled="@isProcessing" />
+                        <small class="form-text text-muted">
+                            Desteklenen formatlar: JPG, PNG, PDF (Maks. 5MB)
+                        </small>
+                    </div>
+
+                    @if (selectedFileName != null)
+                    {
+                        <div class="alert alert-info" role="alert">
+                            <strong>Seçilen Dosya:</strong> @selectedFileName
+                        </div>
+                    }
+
+                    <button class="btn btn-primary" 
+                            @onclick="ProcessForm" 
+                            disabled="@(isProcessing || selectedFileData == null)">
+                        @if (isProcessing)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            <span>İşleniyor...</span>
+                        }
+                        else
+                        {
+                            <span>Form İşle</span>
+                        }
+                    </button>
+                    <button class="btn btn-secondary ms-2" 
+                            @onclick="ResetForm" 
+                            disabled="@isProcessing">
+                        Temizle
+                    </button>
+                </div>
+            </div>
+
+            @if (formData != null)
+            {
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">İşleme Sonuçları</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <p><strong>Form ID:</strong> <code>@formData.FormId</code></p>
+                                <p><strong>İşleme Tarihi:</strong> @formData.ProcessedDate.ToString("yyyy-MM-dd HH:mm:ss")</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p>
+                                    <strong>Durum:</strong>
+                                    @if (formData.Status == "Completed")
+                                    {
+                                        <span class="badge bg-success">@formData.Status</span>
+                                    }
+                                    else if (formData.Status == "Error")
+                                    {
+                                        <span class="badge bg-danger">@formData.Status</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning">@formData.Status</span>
+                                    }
+                                </p>
+                                <p><strong>Güvenilirlik:</strong> @formData.Confidence.ToString("P")</p>
+                            </div>
+                        </div>
+
+                        @if (formData.ExtractedFields.Count > 0)
+                        {
+                            <h6 class="mt-4 mb-3">Çıkarılan Alanlar:</h6>
+                            <table class="table table-sm table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Alan Adı</th>
+                                        <th>Değer</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var field in formData.ExtractedFields)
+                                    {
+                                        <tr>
+                                            <td><strong>@field.Key</strong></td>
+                                            <td>@field.Value</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+
+                        @if (formData.ErrorMessages.Count > 0)
+                        {
+                            <div class="alert alert-warning mt-3" role="alert">
+                                <strong>Uyarılar:</strong>
+                                <ul class="mb-0">
+                                    @foreach (var error in formData.ErrorMessages)
+                                    {
+                                        <li>@error</li>
+                                    }
+                                </ul>
+                            </div>
+                        }
+
+                        <div class="mt-4">
+                            <button class="btn btn-info me-2" @onclick="() => showDetails = !showDetails">
+                                @(showDetails ? "Detayları Gizle" : "Detayları Göster")
+                            </button>
+                            <button class="btn btn-success me-2" @onclick="ExportData">
+                                Verileri İndir
+                            </button>
+                            <button class="btn btn-secondary" @onclick="ResetForm">
+                                Yeni Form Yükle
+                            </button>
+                        </div>
+
+                        @if (showDetails)
+                        {
+                            <div class="alert alert-secondary mt-3" role="alert">
+                                <h6>Detaylı Sonuçlar:</h6>
+                                <pre style="white-space: pre-wrap;">@FormService.ExportFormData(formData)</pre>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private OpticalFormService.FormData? formData;
+    private byte[]? selectedFileData;
+    private string? selectedFileName;
+    private string errorMessage = string.Empty;
+    private string successMessage = string.Empty;
+    private bool isProcessing;
+    private bool showDetails;
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            errorMessage = string.Empty;
+            successMessage = string.Empty;
+            
+            if (e.File == null)
+            {
+                errorMessage = "Lütfen bir dosya seçiniz.";
+                return;
+            }
+
+            // Validate file size (5MB max)
+            const long maxFileSize = 5 * 1024 * 1024;
+            if (e.File.Size > maxFileSize)
+            {
+                errorMessage = "Dosya boyutu 5MB'dan büyük olamaz.";
+                return;
+            }
+
+            // Validate file type
+            var validTypes = new[] { "image/jpeg", "image/png", "application/pdf" };
+            if (!validTypes.Contains(e.File.ContentType))
+            {
+                errorMessage = "Sadece JPG, PNG veya PDF dosyaları desteklenmektedir.";
+                return;
+            }
+
+            // Read file
+            using (var stream = e.File.OpenReadStream())
+            {
+                selectedFileData = new byte[e.File.Size];
+                await stream.ReadExactlyAsync(selectedFileData, 0, (int)e.File.Size);
+                selectedFileName = e.File.Name;
+                successMessage = $"Dosya başarıyla seçildi: {e.File.Name}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Dosya yükleme hatası: {ex.Message}";
+        }
+    }
+
+    private async Task ProcessForm()
+    {
+        try
+        {
+            isProcessing = true;
+            errorMessage = string.Empty;
+            successMessage = string.Empty;
+
+            if (selectedFileData == null || selectedFileData.Length == 0)
+            {
+                errorMessage = "Lütfen önce bir dosya seçiniz.";
+                return;
+            }
+
+            formData = await FormService.ProcessFormAsync(selectedFileData, selectedFileName ?? "form.jpg");
+
+            if (formData.Status == "Completed")
+            {
+                successMessage = "Form başarıyla işlendi.";
+            }
+            else if (formData.Status == "Error")
+            {
+                errorMessage = string.Join(", ", formData.ErrorMessages);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"İşleme hatası: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private void ResetForm()
+    {
+        selectedFileData = null;
+        selectedFileName = null;
+        formData = null;
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+        showDetails = false;
+    }
+
+    private void ExportData()
+    {
+        if (formData == null)
+            return;
+
+        var exportData = FormService.ExportFormData(formData);
+        // In a real app, this would trigger a download
+        successMessage = "Veriler kopyalandı (gerçek uygulamada indirilecektir).";
+    }
+}
